@@ -225,45 +225,20 @@ public class XQueryExtendsVisitor extends XQueryBaseVisitor<ArrayList<Node>> {
 		}
 	}
 
-	// @Override 
-	// public ArrayList<Node> visitCondSome(XQueryParser.CondSomeContext ctx) {
- //        for (int i = 0; i < ctx.Var().size(); i++) {
- //            map.put(ctx.Var(i).getText(), visit(ctx.xq(i)));
- //        }
- //        return visit(ctx.cond());
-	// }
-	private void CondSomeHelper(XQueryParser.CondSomeContext ctx, int k, ArrayList<Node> result) {
-		if (k == ctx.Var().size()) {
-			ArrayList<Node> temp = visit(ctx.cond());
-			if (!temp.isEmpty()) {
-				result.addAll(temp);
-				return;
-			}
-
-		} else {
-			String key = ctx.Var(k).getText();
-			ArrayList<Node> valueList = visit(ctx.xq(k));
-			for (Node value: valueList) {
-				map.remove(key);
-				ArrayList<Node> valuelist = new ArrayList<>();
-				valuelist.add(value);
-				map.put(key, valuelist);
-				CondSomeHelper(ctx, k + 1, result);
-			}
-
-		}
-
-	}
-
-
 	@Override 
-	public ArrayList<Node> visitCondSome(XQueryParser.CondSomeContext ctx) {
-		ArrayList<Node> result = new ArrayList<>();
-		HashMap<String, ArrayList<Node>> ori_map = new HashMap<>(map);
-		CondSomeHelper(ctx, 0, result);
-		map = ori_map;
-		return result;
+	public ArrayList<Node> visitCondSome(XQueryParser.CondSomeContext ctx) { // modified
+		HashMap<String, ArrayList<Node>> ori_Map = new HashMap<>(map);
+		ArrayList ori_list = list;
+        for (int i = 0; i < ctx.Var().size(); i++) {
+            map.put(ctx.Var(i).getText(), visit(ctx.xq(i)));
+        }
+        ArrayList<Node> ret = visit(ctx.cond());
+        map = ori_Map;
+        list = ori_list;
+        return ret;
 	}
+
+
 
 	@Override
 	public ArrayList<Node> visitCondIs(XQueryParser.CondIsContext ctx) {
