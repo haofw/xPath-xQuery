@@ -1,22 +1,22 @@
-for $tuple in join ( join ( join (for $a in document("j_caesar.xml")//ACT,
+for $tuple in join ( join ( join (for $a in document("j_caesar_simple.xml")//ACT,
                    $sa in $a//SCENE,
                    $spa in $sa//SPEAKER,
                    $spea in $sa//SPEECH
                   return<tuple>  <a>  {$a}  </a>, <sa>  {$sa}  </sa>, <spa>  {$spa}  </spa>, <spea>  {$spea}  </spea> </tuple>,
-for $b in document("j_caesar.xml")//ACT,
+for $b in document("j_caesar_simple.xml")//ACT,
                    $sb in $b//SCENE,
                    $spb in $sb//SPEAKER/text(),
                    $speb in $sb//SPEECH
 where $spb eq "FLAVIUS"
                   return<tuple>  <b>  {$b}  </b>, <sb>  {$sb}  </sb>, <spb>  {$spb}  </spb>, <speb>  {$speb}  </speb> </tuple>,
                  [], []  )
-for $c in document("j_caesar.xml")//ACT,
+for $c in document("j_caesar_simple.xml")//ACT,
                    $sc in $c//SCENE,
                    $spc in $sc//SPEAKER,
                    $spec in $sc//SPEECH
                   return<tuple>  <c>  {$c}  </c>, <sc>  {$sc}  </sc>, <spc>  {$spc}  </spc>, <spec>  {$spec}  </spec> </tuple>,
                  [sb,spa,speb], [sc,spc,spec]  )
-for $d in document("j_caesar.xml")//ACT,
+for $d in document("j_caesar_simple.xml")//ACT,
                    $sd in $d//SCENE,
                    $spd in $sd//SPEAKER/text(),
                    $sped in $sd//SPEECH

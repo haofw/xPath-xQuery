@@ -19,23 +19,12 @@ public class XQuery {
         CharStream input = CharStreams.fromFileName(queryFile);
         XQueryParser parser = new XQueryParser(new CommonTokenStream(new XQueryLexer(input)));
         ParseTree tree = parser.xq();
-        XQueryCustomizedVisitor evaluation = new XQueryCustomizedVisitor();
+        XQueryExtender evaluation = new XQueryExtender();
         ArrayList<Node> finalResult = evaluation.visit(tree);
         createResultFile(evaluation.outputDocument, finalResult, resultPath);
 
-        System.out.println("Saving output.xml");
-        if (!finalResult.isEmpty()){
-            System.out.println("finalResult size: " + finalResult.size());
-            for (Node n : finalResult) {
-                System.out.println("Node name: " + n.getNodeName());
-                if (n.getChildNodes() != null) {
-                    for (int i = 0; i < n.getChildNodes().getLength(); i ++) {
-                        System.out.println(n.getChildNodes().item(i).getTextContent());
-                    }
+        System.out.println("Saving to output.xml");
 
-                }
-            }
-        }
     }
 
     public static ArrayList evalRewrited(String rewrited) {
@@ -49,7 +38,7 @@ public class XQuery {
 
             //for Visitor
             XQueryCustomizedVisitor visitor = new XQueryCustomizedVisitor();
-            visitor.reWrite = false;
+            visitor.DoReWrite = false;
             ArrayList<Node> results = visitor.visit(tree);
             return results;
 
