@@ -16,7 +16,7 @@ public class XQueryCustomizedVisitor extends XQueryBaseVisitor<ArrayList<Node>> 
     private HashMap<String, ArrayList<Node>> contextMap = new HashMap<>();
     private Stack<HashMap<String, ArrayList<Node>>> contextStack = new Stack<>();
     private ArrayList<Node> curr = new ArrayList<>();
-    boolean reWrite = true;
+    boolean DoReWrite = true;
 
     @Override
     public ArrayList<Node> visitXqAp(XQueryParser.XqApContext context) {
@@ -99,49 +99,48 @@ public class XQueryCustomizedVisitor extends XQueryBaseVisitor<ArrayList<Node>> 
         ArrayList<Node> result = new ArrayList<>();
         HashMap<String, ArrayList<Node>> contextMapOld = new HashMap<>(contextMap);
         contextStack.push(contextMapOld);
-        if(! reWrite)
+        if(! DoReWrite)
             permute(context, 0, result);
         else{
-            String rewrited = reWriter(context);
-            if (rewrited  == ""){
+            String re = rewrite_Xq(context);
+            if (re  == ""){
                 permute(context, 0, result);
             }
             else
-                result = XQuery.evalRewrited(rewrited);
+                result = XQuery.evalRewrited(re);
         }
         contextMap = contextStack.pop();
         return result;
     }
 
-    private String reWriter(XQueryParser.FLWRContext ctx){
+    private String rewrite_Xq(XQueryParser.FLWRContext ctx){
         //PrintWriter writer = new PrintWriter("the-file-name.txt", "UTF-8");
         String output = "";
-
-        int numFor;// nums of for clause
-        numFor = ctx.forClause().var().size();
-        List<HashSet<String>> classify = new ArrayList<HashSet<String>>();
+        int element_for = ctx.forClause().var().size();
+        Map<Integer, Set<String>> division = new HashMap<>();
+        //List<HashSet<String>> classify = new ArrayList<HashSet<String>>();
 
         //get the division of different join
-        List<String> relation = new ArrayList<String>();
-        for(int i=0; i < numFor;i++) {
+        int numOfD = 0;
+        for(int i=0; i < element_for;i++) {
             String key = ctx.forClause().var(i).getText();
             String parent = ctx.forClause().xq(i).getText().split("/")[0];
-            int size = classify.size();
-            boolean found = false;
+            int size = division.size();
+            boolean inSet = false;
             // construct the classification
             for(int j = 0; j < size; j++) {
-                HashSet<String> curSet = classify.get(j);
-                if(curSet.contains(parent)) {
-                    curSet.add(key);
-                    found = true;
+                Set<String> thisSet = division.get(j);
+                if(thisSet.contains(parent)) {
+                    thisSet.add(key);
+                    inSet = true;
                     break;
                 }
             }
-            if(!found) {
-                HashSet<String> newSet = new HashSet<String>();
-                newSet.add(key);
-                classify.add(newSet);
-                relation.add(key);
+            if(!inSet) {
+                Set<String> set = new HashSet<String>();
+                set.add(key);
+                //classify.add(set);
+                division.put(numOfD ++,set);
             }
         }
         //where clause
@@ -154,13 +153,10 @@ public class XQueryCustomizedVisitor extends XQueryBaseVisitor<ArrayList<Node>> 
             cond[i][1] = where[i].split("eq|=")[1];
         }
 
-        if(classify.size() == 1) {
-            System.out.println("No need to join!");
+        if(division.size() == 1) {
+            System.out.println("can't join");
             return "";
         }
-        /*
-        the relation that the where condition belongs to. it could belong to two relations at most
-         */
         int[][] relaWhere = new int[cond.length][2];
 
         for(int i=0; i < cond.length; i++) {
@@ -168,52 +164,30 @@ public class XQueryCustomizedVisitor extends XQueryBaseVisitor<ArrayList<Node>> 
             String cur1 = cond[i][1];
             relaWhere[i][0] = -1;
             relaWhere[i][1] = -1;
-            for(int j = 0; j < classify.size();j++) {
-                if(classify.get(j).contains(cur0)) {
+            for(int j = 0; j < division.size();j++) {
+                if(division.get(j).contains(cur0)) {
                     relaWhere[i][0] = j;
                 }
-                if(classify.get(j).contains(cur1)) {
+                if(division.get(j).contains(cur1)) {
                     relaWhere[i][1] = j;
                 }
             }
         }
 
 
-        int class_size = classify.size();
+        int size = division.size();
         //print out
         output += "for $tuple in";
-        //writer.print("For $tuple in join  (");
         System.out.print("for $tuple in");
-        for (int i = 1; i < class_size;i++) {
-
+        for (int i = 1; i < size; i++) {
                 output += " join (";
                 System.out.print(" join (");
-
         }
-        //for clause
-        //print eq: [af1,al1],[af21,al21]
-        output = printjoin(classify, ctx, output,cond,relaWhere);
-        // output = Print2Join(classify, ctx, output,cond,relaWhere);
+        output = printJoin(division, ctx, output,cond,relaWhere);
 
-        // if(class_size > 2) {
-        //     output = Print3Join(classify, ctx, output, cond, relaWhere);
-        // }
-        // if(class_size > 3) {
-        //     output = Print4Join(classify, ctx, output, cond, relaWhere);
-        // }
-        // if(class_size > 4) {
-        //     output = Print5Join(classify, ctx, output, cond, relaWhere);
-        // }
-        // if(class_size > 5) {
-        //     output = Print6Join(classify, ctx, output, cond, relaWhere);
-        // }
-
-        /*
-            return clause
-        */
         String retClause = ctx.returnClause().xq().getText();
         String[] tempRet = retClause.split("\\$");
-        for (int i = 0; i < tempRet.length-1; i++) {
+        for (int i = 0; i < tempRet.length - 1; i++) {
             tempRet[i] = tempRet[i]+"$tuple/";
         }
         retClause  = tempRet[0];
@@ -229,11 +203,6 @@ public class XQueryCustomizedVisitor extends XQueryBaseVisitor<ArrayList<Node>> 
                 cur = cur3;
             }
             tempRet[i] = cur[0] + "/*";
-//            if(cur[1].charAt(0) == '$' || cur[1].charAt(0) == '<') {
-//                tempRet[i] += ",";
-//            }else {
-//                tempRet[i] += "/";
-//            }
             if(cur == cur1) {
                 tempRet[i] += ",";
             }else if(cur == cur2) {
@@ -244,33 +213,24 @@ public class XQueryCustomizedVisitor extends XQueryBaseVisitor<ArrayList<Node>> 
             tempRet[i] += cur[1];
             retClause = retClause + tempRet[i];
         }
-//        int end = tempRet.length-1;
-//        String[] cur = tempRet[end].split("}",2);
-//        tempRet[end] = cur[0] + "/*}";
-//        tempRet[end] += cur[1];
-//        retClause = retClause + tempRet[end];
 
         output += "return\n";
         output += retClause+"\n";
         System.out.println("return");
         System.out.println(retClause);
-        /*
-            write in txt
-         */
         writer w = new writer();
         w.writing("rewrite.txt",output);
         return output;
     }
-    private String printjoin(List<HashSet<String>> classify, XQueryParser.FLWRContext ctx, String output,String[][] cond,int[][] relaWhere) 
+    private String printJoin(Map<Integer, Set<String>> division, XQueryParser.FLWRContext ctx, String output,String[][] cond,int[][] relaWhere) 
     {
-        int numFor = ctx.forClause().var().size();
-        for(int p = 0; p < classify.size(); p++) 
-        {
-            HashSet<String> curSet = classify.get(p);
+        int element_for = ctx.forClause().var().size();
+        for(int p = 0; p < division.size(); p++) {
+            Set<String> curSet = division.get(p);
             String tuples = "";
             int count = 0;
             //print for
-            for(int k = 0; k < numFor; k++) {
+            for(int k = 0; k < element_for; k++) {
                 String key = ctx.forClause().var(k).getText();
                 if(curSet.contains(key)){
                     if(count == 0) {
@@ -290,13 +250,13 @@ public class XQueryCustomizedVisitor extends XQueryBaseVisitor<ArrayList<Node>> 
                     }
                 }
             }
-
             output += "\n";
             System.out.print("\n");
+
             //print where
             for(int j = 0;j < cond.length;j++) {
                 int count1 = 0;
-                if(relaWhere[j][1] == -1 && curSet.contains(cond[j][0])) {
+                if(curSet.contains(cond[j][0]) && relaWhere[j][1] == -1 ) {
                     if(count1 == 0){
                         count1++;
                         output += "where " + cond[j][0] + " eq " + cond[j][1] +"\n";
@@ -311,377 +271,83 @@ public class XQueryCustomizedVisitor extends XQueryBaseVisitor<ArrayList<Node>> 
             tuples = "<tuple> "+tuples+" </tuple>,";
             output += "                  return" + tuples + "\n";
             System.out.println("                  return" + tuples);
+
             if(p == 0)
                 continue;
 
-        //return
-        ArrayList<String> ret0 = new ArrayList<String>();
-        ArrayList<String> ret1 = new ArrayList<String>();
-        for(int i = 0; i < cond.length; i++) 
-        {
-            if (relaWhere[i][1] != -1 &&  relaWhere[i][0] == p && relaWhere[i][0] > relaWhere[i][1]) 
+            //return
+            ArrayList<String> left = new ArrayList<String>();
+            ArrayList<String> right = new ArrayList<String>();
+            for(int i = 0; i < cond.length; i++) 
             {
-                ret0.add(cond[i][1].substring(1));
-                ret1.add(cond[i][0].substring(1));
+                if (relaWhere[i][1] != -1 &&  relaWhere[i][0] == p && relaWhere[i][0] > relaWhere[i][1]) 
+                {
+                    left.add(cond[i][1].substring(1));
+                    right.add(cond[i][0].substring(1));
+                }
+                else if(relaWhere[i][0] != -1 &&  relaWhere[i][1] == p && relaWhere[i][0]<relaWhere[i][1]) 
+                {
+                    left.add(cond[i][0].substring(1));
+                    right.add(cond[i][1].substring(1));
+                }
             }
-            else if(relaWhere[i][0] != -1 &&  relaWhere[i][1] == p && relaWhere[i][0]<relaWhere[i][1]) 
-            {
-                ret0.add(cond[i][0].substring(1));
-                ret1.add(cond[i][1].substring(1));
+            //output = PrintJoinCond(ret0,ret1,output);
+            output += "                 [";
+            System.out.print("                 [");
+            for(int i = 0; i < left.size();i++) {
+                output +=left.get(i);
+                System.out.print(left.get(i));
+                if(i != left.size()-1) {
+                    output +=",";
+                    System.out.print(",");
+                }
             }
+            output +="], [";
+            System.out.print("], [");
+            for(int i = 0; i < right.size();i++) {
+                output +=right.get(i);
+                System.out.print(right.get(i));
+                if(i != right.size()-1) {
+                    output +=",";
+                    System.out.print(",");
+                }
+            }
+            output += "]  ";
+            System.out.print("]  ");
+
+            output += ")\n";
+            System.out.println(")");
         }
-        output = PrintJoinCond(ret0,ret1,output);
-        output += ")\n";
-        System.out.println(")");
-    }
         return output;
     }
 
-    private String PrintJoinCond(ArrayList<String> ret0, ArrayList<String> ret1, String output) {
-        output += "                 [";
-        System.out.print("                 [");
-        for(int i = 0; i < ret0.size();i++) {
-            output +=ret0.get(i);
-            System.out.print(ret0.get(i));
-            if(i != ret0.size()-1) {
-                output +=",";
-                System.out.print(",");
-            }
-        }
-        output +="], [";
-        System.out.print("], [");
-        for(int i = 0; i < ret1.size();i++) {
-            output +=ret1.get(i);
-            System.out.print(ret1.get(i));
-            if(i != ret1.size()-1) {
-                output +=",";
-                System.out.print(",");
-            }
-        }
-        output += "]  ";
-        System.out.print("]  ");
-        return output;
-    }
+    // private String PrintJoinCond(ArrayList<String> ret0, ArrayList<String> ret1, String output) {
+    //     output += "                 [";
+    //     System.out.print("                 [");
+    //     for(int i = 0; i < ret0.size();i++) {
+    //         output +=ret0.get(i);
+    //         System.out.print(ret0.get(i));
+    //         if(i != ret0.size()-1) {
+    //             output +=",";
+    //             System.out.print(",");
+    //         }
+    //     }
+    //     output +="], [";
+    //     System.out.print("], [");
+    //     for(int i = 0; i < ret1.size();i++) {
+    //         output +=ret1.get(i);
+    //         System.out.print(ret1.get(i));
+    //         if(i != ret1.size()-1) {
+    //             output +=",";
+    //             System.out.print(",");
+    //         }
+    //     }
+    //     output += "]  ";
+    //     System.out.print("]  ");
+    //     return output;
+    // }
 
-    private String Print2Join(List<HashSet<String>> classify, XQueryParser.FLWRContext ctx, String output,String[][] cond,int[][] relaWhere) {
-        //for clause
-        int numFor = ctx.forClause().var().size();
-        //for(int i = 0; i < classify.size(); i++) {
-        for(int i = 0; i < 2; i++) {
-            HashSet<String> curSet = classify.get(i);
-            String tuples = "";
-            int count = 0;
-            //print for
-            for(int k = 0; k < numFor; k++) {
-                String key = ctx.forClause().var(k).getText();
-                if(curSet.contains(key)){
-                    if(count == 0) {
-                        output += "for " + key + " in " + ctx.forClause().xq(k).getText();
-                        System.out.print("for " + key + " in " + ctx.forClause().xq(k).getText());
-                        count++;
-                    }else {
-                        output += ",\n";
-                        output += "                   " + key + " in " + ctx.forClause().xq(k).getText();
-                        System.out.println(",");
-                        System.out.print("                   " + key + " in " + ctx.forClause().xq(k).getText());
-                    }
-                    if(tuples.equals("")) {
-                        tuples = tuples + " <" + key.substring(1) + "> " + " {" + key + "} " + " </" + key.substring(1) + ">";
-                    }else {
-                        tuples = tuples + ", <" + key.substring(1) + "> " + " {" + key + "} " + " </" + key.substring(1) + ">";
-                    }
-                }
-            }
-            output += "\n";
-            System.out.print("\n");
-            //print where
-            for(int j = 0;j < cond.length;j++) {
-                int count1 = 0;
-                if(relaWhere[j][1] == -1 && curSet.contains(cond[j][0])) {
-                    if(count1 == 0){
-                        count1++;
-                        output += "where " + cond[j][0] + " eq " + cond[j][1] +"\n";
-                        System.out.println("where " + cond[j][0] + " eq " + cond[j][1]);
-                    }else {
-                        output += " and  " + cond[j][0] + " eq " + cond[j][1] + "\n";
-                        System.out.println(" and  " + cond[j][0] + " eq " + cond[j][1]);
-                    }
-                }
-            }
-            //print return
-            tuples = "<tuple> "+tuples+" </tuple>,";
-            output += "                  return" + tuples + "\n";
-            System.out.println("                  return" + tuples);
-        }
-        //return
-        ArrayList<String> ret0 = new ArrayList<String>();
-        ArrayList<String> ret1 = new ArrayList<String>();
-        for(int i = 0; i < cond.length; i++) {
-            if (relaWhere[i][0] == 1 && relaWhere[i][1] == 0) {
-                ret0.add(cond[i][1].substring(1));
-                ret1.add(cond[i][0].substring(1));
-            }else if(relaWhere[i][0] == 0 && relaWhere[i][1] == 1) {
-                ret0.add(cond[i][0].substring(1));
-                ret1.add(cond[i][1].substring(1));
-            }
-        }
-        output = PrintJoinCond(ret0,ret1,output);
-        output += ")\n";
-        System.out.println(")");
-        return output;
-    }
-    private String Print3Join(List<HashSet<String>> classify, XQueryParser.FLWRContext ctx,String output,String[][] cond,int[][] relaWhere) {
-        int numFor = ctx.forClause().var().size();
-        HashSet<String> curSet = classify.get(2);
-        String tuples = "";
-        int count = 0;
-        //print for
-        for(int k = 0; k < numFor; k++) {
-            String key = ctx.forClause().var(k).getText();
-            if(curSet.contains(key)){
-                if(count == 0) {
-                    output += ",for " + key + " in " + ctx.forClause().xq(k).getText();
-                    System.out.print(",for " + key + " in " + ctx.forClause().xq(k).getText());
-                    count++;
-                }else {
-                    output += ",\n";
-                    output += "                   " + key + " in " + ctx.forClause().xq(k).getText();
-                    System.out.println(",");
-                    System.out.print("                   " + key + " in " + ctx.forClause().xq(k).getText());
-                }
-                if(tuples.equals("")) {
-                    tuples = tuples + " <" + key.substring(1) + "> " + " {" + key + "} " + " </" + key.substring(1) + ">";
-                }else {
-                    tuples = tuples + ", <" + key.substring(1) + "> " + " {" + key + "} " + " </" + key.substring(1) + ">";
-                }
-            }
-        }
-        output += "\n";
-        System.out.print("\n");
-        //print where
-        for(int j = 0;j < cond.length;j++) {
-            int count1 = 0;
-            if(relaWhere[j][1] == -1 && curSet.contains(cond[j][0])) {
-                if(count1 == 0){
-                    count1++;
-                    output += "where " + cond[j][0] + " eq " + cond[j][1] +"\n";
-                    System.out.println("where " + cond[j][0] + " eq " + cond[j][1]);
-                }else {
-                    output += " and  " + cond[j][0] + " eq " + cond[j][1] + "\n";
-                    System.out.println(" and  " + cond[j][0] + " eq " + cond[j][1]);
-                }
-            }
-        }
-        //print return
-        tuples = "<tuple> "+tuples+" </tuple>,";
-        output += "                  return" + tuples + "\n";
-        System.out.println("                  return" + tuples);
-
-        ArrayList<String> ret0 = new ArrayList<String>();
-        ArrayList<String> ret2 = new ArrayList<String>();
-        for(int i = 0; i < cond.length; i++) {
-            if (relaWhere[i][0] == 2 && (relaWhere[i][1] == 1 || relaWhere[i][1] == 0)){
-                ret0.add(cond[i][1].substring(1));
-                ret2.add(cond[i][0].substring(1));
-            }else if((relaWhere[i][0] == 1 || relaWhere[i][0] == 0) && relaWhere[i][1] == 2) {
-                ret0.add(cond[i][0].substring(1));
-                ret2.add(cond[i][1].substring(1));
-            }
-        }
-        output = PrintJoinCond(ret0,ret2,output);
-        output += ")\n";
-        System.out.println(")");
-        return output;
-    }
-    private String Print4Join(List<HashSet<String>> classify, XQueryParser.FLWRContext ctx,String output,String[][] cond,int[][] relaWhere) {
-        int numFor = ctx.forClause().var().size();
-        HashSet<String> curSet = classify.get(3);
-        String tuples = "";
-        int count = 0;
-        //print for
-        for(int k = 0; k < numFor; k++) {
-            String key = ctx.forClause().var(k).getText();
-            if(curSet.contains(key)){
-                if(count == 0) {
-                    output += ",for " + key + " in " + ctx.forClause().xq(k).getText();
-                    System.out.print(",for " + key + " in " + ctx.forClause().xq(k).getText());
-                    count++;
-                }else {
-                    output += ",\n";
-                    output += "                   " + key + " in " + ctx.forClause().xq(k).getText();
-                    System.out.println(",");
-                    System.out.print("                   " + key + " in " + ctx.forClause().xq(k).getText());
-                }
-                if(tuples.equals("")) {
-                    tuples = tuples + " <" + key.substring(1) + "> " + " {" + key + "} " + " </" + key.substring(1) + ">";
-                }else {
-                    tuples = tuples + ", <" + key.substring(1) + "> " + " {" + key + "} " + " </" + key.substring(1) + ">";
-                }
-            }
-        }
-        output += "\n";
-        System.out.print("\n");
-        //print where
-        for(int j = 0;j < cond.length;j++) {
-            int count1 = 0;
-            if(relaWhere[j][1] == -1 && curSet.contains(cond[j][0])) {
-                if(count1 == 0){
-                    count1++;
-                    output += "where " + cond[j][0] + " eq " + cond[j][1] +"\n";
-                    System.out.println("where " + cond[j][0] + " eq " + cond[j][1]);
-                }else {
-                    output += " and  " + cond[j][0] + " eq " + cond[j][1] + "\n";
-                    System.out.println(" and  " + cond[j][0] + " eq " + cond[j][1]);
-                }
-            }
-        }
-        //print return
-        tuples = "<tuple> "+tuples+" </tuple>,";
-        output += "                  return" + tuples + "\n";
-        System.out.println("                  return" + tuples);
-
-        ArrayList<String> ret0 = new ArrayList<String>();
-        ArrayList<String> ret2 = new ArrayList<String>();
-        for(int i = 0; i < cond.length; i++) {
-            if (relaWhere[i][0] == 3 && (relaWhere[i][1] >= 0 && relaWhere[i][1] <= 2)){
-                ret0.add(cond[i][1].substring(1));
-                ret2.add(cond[i][0].substring(1));
-            }else if((relaWhere[i][0] >= 0 && relaWhere[i][0] <= 2) && relaWhere[i][1] == 3) {
-                ret0.add(cond[i][0].substring(1));
-                ret2.add(cond[i][1].substring(1));
-            }
-        }
-        output = PrintJoinCond(ret0,ret2,output);
-        output += ")\n";
-        System.out.println(")");
-        return output;
-    }
-    private String Print5Join(List<HashSet<String>> classify, XQueryParser.FLWRContext ctx,String output,String[][] cond,int[][] relaWhere) {
-        int numFor = ctx.forClause().var().size();
-        HashSet<String> curSet = classify.get(4);
-        String tuples = "";
-        int count = 0;
-        //print for
-        for(int k = 0; k < numFor; k++) {
-            String key = ctx.forClause().var(k).getText();
-            if(curSet.contains(key)){
-                if(count == 0) {
-                    output += ",for " + key + " in " + ctx.forClause().xq(k).getText();
-                    System.out.print(",for " + key + " in " + ctx.forClause().xq(k).getText());
-                    count++;
-                }else {
-                    output += ",\n";
-                    output += "                   " + key + " in " + ctx.forClause().xq(k).getText();
-                    System.out.println(",");
-                    System.out.print("                   " + key + " in " + ctx.forClause().xq(k).getText());
-                }
-                if(tuples.equals("")) {
-                    tuples = tuples + " <" + key.substring(1) + "> " + " {" + key + "} " + " </" + key.substring(1) + ">";
-                }else {
-                    tuples = tuples + ", <" + key.substring(1) + "> " + " {" + key + "} " + " </" + key.substring(1) + ">";
-                }
-            }
-        }
-        output += "\n";
-        System.out.print("\n");
-        //print where
-        for(int j = 0;j < cond.length;j++) {
-            int count1 = 0;
-            if(relaWhere[j][1] == -1 && curSet.contains(cond[j][0])) {
-                if(count1 == 0){
-                    count1++;
-                    output += "where " + cond[j][0] + " eq " + cond[j][1] +"\n";
-                    System.out.println("where " + cond[j][0] + " eq " + cond[j][1]);
-                }else {
-                    output += " and  " + cond[j][0] + " eq " + cond[j][1] + "\n";
-                    System.out.println(" and  " + cond[j][0] + " eq " + cond[j][1]);
-                }
-            }
-        }
-        //print return
-        tuples = "<tuple> "+tuples+" </tuple>,";
-        output += "                  return" + tuples + "\n";
-        System.out.println("                  return" + tuples);
-
-        ArrayList<String> ret0 = new ArrayList<String>();
-        ArrayList<String> ret2 = new ArrayList<String>();
-        for(int i = 0; i < cond.length; i++) {
-            if (relaWhere[i][0] == 2 && (relaWhere[i][1] == 1 || relaWhere[i][1] == 0)){
-                ret0.add(cond[i][1].substring(1));
-                ret2.add(cond[i][0].substring(1));
-            }else if((relaWhere[i][0] == 1 || relaWhere[i][0] == 0) && relaWhere[i][1] == 2) {
-                ret0.add(cond[i][0].substring(1));
-                ret2.add(cond[i][1].substring(1));
-            }
-        }
-        output = PrintJoinCond(ret0,ret2,output);
-        output += ")\n";
-        System.out.println(")");
-        return output;
-    }
-    private String Print6Join(List<HashSet<String>> classify, XQueryParser.FLWRContext ctx,String output,String[][] cond,int[][] relaWhere) {
-        int numFor = ctx.forClause().var().size();
-        HashSet<String> curSet = classify.get(5);
-        String tuples = "";
-        int count = 0;
-        //print for
-        for(int k = 0; k < numFor; k++) {
-            String key = ctx.forClause().var(k).getText();
-            if(curSet.contains(key)){
-                if(count == 0) {
-                    output += ",for " + key + " in " + ctx.forClause().xq(k).getText();
-                    System.out.print(",for " + key + " in " + ctx.forClause().xq(k).getText());
-                    count++;
-                }else {
-                    output += ",\n";
-                    output += "                   " + key + " in " + ctx.forClause().xq(k).getText();
-                    System.out.println(",");
-                    System.out.print("                   " + key + " in " + ctx.forClause().xq(k).getText());
-                }
-                if(tuples.equals("")) {
-                    tuples = tuples + " <" + key.substring(1) + "> " + " {" + key + "} " + " </" + key.substring(1) + ">";
-                }else {
-                    tuples = tuples + ", <" + key.substring(1) + "> " + " {" + key + "} " + " </" + key.substring(1) + ">";
-                }
-            }
-        }
-        output += "\n";
-        System.out.print("\n");
-        //print where
-        for(int j = 0;j < cond.length;j++) {
-            int count1 = 0;
-            if(relaWhere[j][1] == -1 && curSet.contains(cond[j][0])) {
-                if(count1 == 0){
-                    count1++;
-                    output += "where " + cond[j][0] + " eq " + cond[j][1] +"\n";
-                    System.out.println("where " + cond[j][0] + " eq " + cond[j][1]);
-                }else {
-                    output += " and  " + cond[j][0] + " eq " + cond[j][1] + "\n";
-                    System.out.println(" and  " + cond[j][0] + " eq " + cond[j][1]);
-                }
-            }
-        }
-        //print return
-        tuples = "<tuple> "+tuples+" </tuple>,";
-        output += "                  return" + tuples + "\n";
-        System.out.println("                  return" + tuples);
-
-        ArrayList<String> ret0 = new ArrayList<String>();
-        ArrayList<String> ret2 = new ArrayList<String>();
-        for(int i = 0; i < cond.length; i++) {
-            if (relaWhere[i][0] == 2 && (relaWhere[i][1] == 1 || relaWhere[i][1] == 0)){
-                ret0.add(cond[i][1].substring(1));
-                ret2.add(cond[i][0].substring(1));
-            }else if((relaWhere[i][0] == 1 || relaWhere[i][0] == 0) && relaWhere[i][1] == 2) {
-                ret0.add(cond[i][0].substring(1));
-                ret2.add(cond[i][1].substring(1));
-            }
-        }
-        output = PrintJoinCond(ret0,ret2,output);
-        output += ")\n";
-        System.out.println(")");
-        return output;
-    }
+ 
 
 
     @Override
@@ -933,41 +599,6 @@ public class XQueryCustomizedVisitor extends XQueryBaseVisitor<ArrayList<Node>> 
         curr = nodes;
         return cond;
     }
-    // @Override public ArrayList<Node> visitXqSome(XQueryParser.XqSomeContext context) {
-    //     HashMap<String, ArrayList<Node>> copyContext = new HashMap<>(contextMap);
-    //     ArrayList<Node> res = new ArrayList<>();
-    //     someHelper(0, res, context);
-    //     contextMap = copyContext;
-    //     if (res.size() > 0) return res;
-    //     res.add(inputDocument.createTextNode("false"));
-    //     return res;
-    // }
-
-    // private void someHelper(int index, ArrayList<Node> res, XQueryParser.XqSomeContext context) {
-    //     if (index == context.var().size()) {
-    //         ArrayList<Node> condRes = visit(context.cond());
-    //         if (condRes.get(0).getTextContent().equals("true")) {
-    //             res.add(inputDocument.createTextNode("true"));
-    //             return;
-    //         }
-    //     }
-    //     if (res.size() > 0 && res.get(0).getTextContent().equals("true")) return;
-    //     String key = context.var(index).getText();
-    //     ArrayList<Node> values = visit(context.xq(index));
-    //     for (int j = 0; j < values.size(); j++) {
-    //         HashMap<String, ArrayList<Node>> copyContext = new HashMap<>(contextMap);
-    //         ArrayList<Node> value = new ArrayList<Node>();
-    //         value.add(values.get(j));
-    //         contextMap.put(key, value);
-    //         someHelper(index + 1, res, context);
-    //         contextMap = copyContext;
-    //     }
-    // }
-
-
-
-
-
 
 
     @Override
