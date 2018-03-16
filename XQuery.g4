@@ -1,92 +1,61 @@
+/* XQuery
+ *
+ *
+ */
+
 grammar XQuery;
+import XPath;
 
 
-xq    
-                  : Var                                               # XqVariable 
-                  | StringConstant                                    # XqStringConstant
-                  | ap                                                # XqAp
-                  | '(' xq ')'                                        # XqWithP
-                  | xq ',' xq                                         # XqComma
-                  | xq '/' rp                                         # XqChildRp
-                  | xq '//' rp                                        # XqAll
-                  | '<' TAGNAME '>' '{' xq '}' '<' '/' TAGNAME '>'    # XqTag
-                  | forClause letClause? whereClause? returnClause    # XqFLWR
-                  | letClause xq                                      # XqLet
-                  ;
+xq
+	: var														# Variable
+	| StringConstant											# StringC
+	| ap														# XqAp
+	| '(' xq ')'												# XqwithP
+	| xq ',' xq 											    # TwoXq
+	| xq '/' rp													# XqRp
+	| xq '//' rp 												# XqRpall
+	| '<' NAME '>' '{' xq '}' '<' '/' NAME '>'					# XqConstructor
+	| forClause letClause? whereClause? returnClause    		# FLWR
+	| letClause xq 												# XqLet
+	| joinClause												# XQJoin
+	;
 
-Var          
-                  : '$' TAGNAME
-                  ;
+var
+	: '$' NAME
+	;
 
-forClause    
-                  : 'for' Var 'in' xq (',' Var 'in' xq)* 
-                  ;
-letClause    
-                  : 'let' Var ':=' xq (',' Var ':=' xq)* 
-                  ;
-whereClause  
-                  : 'where' cond
-                  ;
-returnClause 
-                  : 'return' xq
-                  ;
+joinClause
+	: 'join' '(' xq ',' xq ',' idList ',' idList ')';
 
-cond         
-                  : xq '=' xq                                                  # CondEqual
-                  | xq 'eq' xq                                                 # CondEqual
-                  | xq '==' xq                                                 # CondIs
-                  | xq 'is' xq                                                 # CondIs
-                  | 'empty' '(' xq ')'                                         # CondEmpty
-                  | 'some' Var 'in' xq (',' Var 'in' xq)* 'satisfies' cond     # CondSome
-                  | '(' cond ')'                                               # CondWithP
-                  | cond 'and' cond                                            # CondAnd
-                  | cond 'or' cond                                             # CondOr
-                  | 'not' cond                                                 # CondNot
-                  ;
+forClause
+	: 'for' var 'in' xq (',' var 'in' xq)*
+	;
 
-StringConstant:  '"'+[a-zA-Z0-9,.!?:; _'"-]+'"';
+letClause
+	: 'let' var ':=' xq (',' var ':=' xq)*
+	;
 
+whereClause
+	: 'where' cond 
+	;
 
-ap
-                  : doc '/' rp                                                # ApChildren
-                  | doc '//' rp                                               # ApAll
-                  ;
+returnClause
+	: 'return' xq
+	;
 
-doc
-                  : 'doc("' filename '")'
-                  ;
+cond
+	: xq '=' xq 											 # XqEqual
+	| xq 'eq' xq 											 # XqEqual
+	| xq '==' xq 											 # XqIs
+	| xq 'is' xq 											 # XqIs
+	| 'empty' '(' xq ')' 		 							 # XqEmpty
+	| 'some' var 'in' xq (',' var 'in' xq)* 'satisfies' cond # XqSome
+	| '(' cond ')' 											 # XqCondwithP
+	| cond 'and' cond 										 # XqCondAnd
+	| cond 'or' cond 										 # XqCondOr
+	| 'not' cond 											 # XqCondNot
+	;
 
-filename
-                  : TAGNAME ('.' TAGNAME)?
-                  ;
-
-rp
-                  : TAGNAME                      # RpTagName
-                  | '*'                          # RpAllChildren
-                  | '.'                          # RpCurrent
-                  | '..'                         # RpParent
-                  | TXT                          # Txt
-                  | '@' TAGNAME                  # RpAttribute
-                  | '(' rp ')'                   # RpWithP
-                  | rp '/' rp                    # RpChildren
-                  | rp '//' rp                   # RpAll
-                  | rp '[' filter ']'            # RpFilter
-                  | rp ',' rp                    # RpComma
-                  ;
-
-
-filter
-                  : rp                           # FltRp
-                  | rp '=' rp                    # FltEqual
-                  | rp 'eq' rp                   # FltEqual
-                  | rp '==' rp                   # FltIs
-                  | rp 'is' rp                   # FltIs
-                  | '(' filter ')'               # FltWithP
-                  | filter 'and' filter          # FltAnd
-                  | filter 'or' filter           # FltOr
-                  | 'not' filter                 # FltNot
-                  ;
-
-TAGNAME: [a-zA-Z0-9_-]+;
-TXT: 'text()';
-WS : [ \t\r\n]+ -> skip;
+idList: '[' NAME (',' NAME)* ']' ;
+StringConstant: '"'+[a-zA-Z0-9,.!?; ''""-]+'"';
